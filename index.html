@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>ReveeFlow</title>
+    <link rel="icon" type="image/png" href="assets/reveeflow-favicon.png?v=60" />
+    <link rel="apple-touch-icon" href="assets/reveeflow-favicon.png?v=60" />
+    <link rel="stylesheet" href="styles.css?v=60" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar" aria-label="Navegação principal">
+        <div class="brand">
+          <img class="brand-logo" src="assets/reveeflow-logo.png?v=50" alt="ReveeFlow" />
+          <button class="sidebar-collapse-button" data-action="toggle-sidebar" type="button" aria-label="Encolher menu">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m14 8-4 4 4 4"/></svg>
+          </button>
+        </div>
+
+        <button class="client-select" type="button">
+          <span>Workspace ativo</span>
+          <strong>Revee Studio</strong>
+          <small>⌄</small>
+        </button>
+
+        <p class="menu-label">Menu</p>
+        <nav class="nav" id="nav"></nav>
+
+        <button class="sidebar-card" data-action="open-profile-menu" type="button">
+          <div class="mini-avatar">D</div>
+          <div>
+            <strong>Juliana Silva</strong>
+            <p>Designer</p>
+          </div>
+          <small>⌃</small>
+        </button>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <h1 id="section-title">O que fazer agora</h1>
+            <p class="eyebrow" id="section-kicker">Cérebro do Dia</p>
+          </div>
+          <div class="topbar-actions">
+            <label class="search-box" aria-label="Buscar">
+              <span>⌕</span>
+              <input id="global-search" type="search" placeholder="Buscar algo..." />
+            </label>
+            <button class="top-icon notification-button" data-action="open-notifications" type="button" aria-label="Notificações">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
+            </button>
+            <button class="top-icon timer-button" data-action="open-timer" type="button" aria-label="Timer da tarefa">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"></circle><path d="M12 9v4l2.5 1.5M9 2h6"></path></svg>
+            </button>
+            <button class="add-button" data-action="open-create-menu" type="button" aria-label="Criar novo item"><span>＋</span><strong>Novo</strong></button>
+          </div>
+        </header>
+
+        <section id="app" class="page"></section>
+      </main>
+    </div>
+
+    <template id="tag-template">
+      <span class="tag"></span>
+    </template>
+
+    <div class="modal-backdrop" id="modal-backdrop" hidden>
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Cadastro rápido</p>
+            <h2 id="modal-title">Novo item</h2>
+          </div>
+          <button class="icon-button" data-action="close-modal" type="button" aria-label="Fechar">×</button>
+        </div>
+        <div id="modal-content"></div>
+      </section>
+    </div>
+
+    <script>
+      try {
+        if (!localStorage.getItem("reveeflow-state-v3")) {
+          localStorage.removeItem("reveeflow-state");
+          localStorage.removeItem("reveeflow-state-v2");
+        }
+      } catch (error) {}
+    </script>
+    <script>
+      window.REVEEFLOW_SUPABASE_URL = window.REVEEFLOW_SUPABASE_URL || "https://qfetrnrjpokcocewfujm.supabase.co";
+      window.REVEEFLOW_SUPABASE_ANON_KEY = window.REVEEFLOW_SUPABASE_ANON_KEY || "sb_publishable_Br7LbqxNv-sNzWMapbqvvQ_0uZ9SpZz";
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js?v=60"></script>
+  </body>
+</html>
