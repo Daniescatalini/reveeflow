@@ -383,7 +383,12 @@ function profileFirstName() {
 function getSupabaseClient() {
   if (supabaseClient) return supabaseClient;
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !window.supabase?.createClient) return null;
-  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  try {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  } catch (error) {
+    console.warn("ReveeFlow Supabase unavailable", error);
+    supabaseClient = null;
+  }
   return supabaseClient;
 }
 
@@ -400,7 +405,7 @@ function readAuthSession() {
 }
 
 function isAuthenticated() {
-  return Boolean(authSession?.email && (!isSupabaseEnabled() || authSession.source === "supabase"));
+  return Boolean(authSession?.email);
 }
 
 function authUsers() {
@@ -416,6 +421,7 @@ function saveAuthUsers(users) {
 }
 
 function applyAuthUser(user, source = "local") {
+  const previousProfile = state.profile || {};
   authSession = {
     id: user.id || crypto.randomUUID(),
     email: user.email,
@@ -427,6 +433,7 @@ function applyAuthUser(user, source = "local") {
   state.profile.name = authSession.name;
   state.profile.email = authSession.email;
   state.profile.role = authSession.role;
+  state.profile.photo ||= previousProfile.photo || previousProfile.avatar || "";
   state.profile.accessCode ||= generateAccessCode(authSession.name);
   normalizeState();
 }
@@ -453,11 +460,6 @@ async function restoreSupabaseSession() {
   if (error) return;
   const user = data?.session?.user;
   if (!user) {
-    if (authSession && authSession.source !== "supabase") {
-      authSession = null;
-      localStorage.removeItem(AUTH_KEY);
-      render();
-    }
     return;
   }
   applyAuthUser({
@@ -1086,7 +1088,7 @@ async function handleAuthSubmit(form) {
       submit.disabled = false;
       return;
     }
-  if (client) {
+    if (client) {
       if (form.dataset.authForm === "register") {
         const { data: result, error } = await client.auth.signUp({ email, password, options: { data: { name } } });
         if (error) throw error;
@@ -1109,34 +1111,57 @@ async function handleAuthSubmit(form) {
       return;
     }
 
+    const loggedInLocally = handleLocalAuthSubmit({ form, message, email, password, name });
+    if (loggedInLocally) {
+      renderSidebarProfile();
+      render();
+    }
+  } catch (error) {
+    const recoveredLocally = handleLocalAuthSubmit({ form, message, email, password, name, cloudError: error });
+    if (recoveredLocally) {
+      renderSidebarProfile();
+      render();
+      return;
+    }
+    if (message) message.textContent = error.message || "Não foi possível acessar agora.";
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+function handleLocalAuthSubmit({ form, message, email, password, name, cloudError }) {
+  if (form.dataset.authForm === "recover") return false;
+  const localNotice = cloudError ? " A nuvem não respondeu, então mantive o acesso local neste aparelho." : "";
+  try {
     const users = authUsers();
     if (form.dataset.authForm === "register") {
       if (!name) {
         if (message) message.textContent = "Digite seu nome para cadastrar.";
-        return;
+        return false;
       }
       if (users.some((user) => user.email === email)) {
         if (message) message.textContent = "Este e-mail já está cadastrado. Entre com sua senha.";
-        return;
+        return false;
       }
       const user = { id: crypto.randomUUID(), name, email, password, role: "Designer" };
       saveAuthUsers([...users, user]);
-      if (message) message.textContent = "Cadastro criado. No Supabase, o e-mail de confirmação será enviado automaticamente.";
+      if (message) message.textContent = `Cadastro local criado.${localNotice}`;
       setAuthSession(user, "local");
     } else {
       const user = users.find((item) => item.email === email && item.password === password);
       if (!user) {
-        if (message) message.textContent = "Conta não encontrada. Faça o cadastro primeiro.";
-        return;
+        if (message) message.textContent = cloudError
+          ? "Não consegui entrar na nuvem agora. Se for este aparelho, use Cadastro para criar um acesso local."
+          : "Conta não encontrada. Faça o cadastro primeiro.";
+        return false;
       }
+      if (message && cloudError) message.textContent = `Entrada local liberada.${localNotice}`;
       setAuthSession(user, "local");
     }
-    renderSidebarProfile();
-    render();
+    return true;
   } catch (error) {
-    if (message) message.textContent = error.message || "Não foi possível acessar agora.";
-  } finally {
-    submit.disabled = false;
+    if (message) message.textContent = error.message || "Não foi possível salvar o acesso local.";
+    return false;
   }
 }
 
@@ -2261,8 +2286,13 @@ function searchItems(items, keys) {
 
 function persistState() {
   const payload = statePayload();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  scheduleSupabaseSave(payload);
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    scheduleSupabaseSave(payload);
+  } catch (error) {
+    console.warn("ReveeFlow local save failed", error);
+    notify("Não consegui salvar neste navegador. Verifique o espaço ou permissões.");
+  }
 }
 
 function statePayload() {
@@ -2302,9 +2332,13 @@ function scheduleSupabaseSave(payload) {
         data: payload,
         updated_at: new Date().toISOString(),
       }, { onConflict: "user_id" })
-    ).catch((error) => {
-      console.warn("ReveeFlow Supabase save failed", error);
-    });
+    )
+      .then(({ error }) => {
+        if (error) console.warn("ReveeFlow Supabase save failed", error);
+      })
+      .catch((error) => {
+        console.warn("ReveeFlow Supabase save failed", error);
+      });
   }, 600);
 }
 
@@ -2370,6 +2404,13 @@ function normalizeState() {
   state.services = Array.isArray(state.services) && state.services.length ? state.services : createDefaultServices();
   state.workConfig ||= { hoursPerDay: 6, margin: 25, workDays: ["Seg", "Ter", "Qua", "Qui", "Sex"], holidays: "nao" };
   repairStoredPortugueseText();
+  if (state.profile && !state.profile.photo) {
+    const profilePhotoSource = state.members.find((member) =>
+      (state.profile.email && member.email === state.profile.email) ||
+      (state.profile.name && member.name === state.profile.name)
+    );
+    state.profile.photo = profilePhotoSource?.photo || profilePhotoSource?.avatar || "";
+  }
   if (state.profile?.name) {
     const owner = state.members.find((member) => member.id === "profile-owner") || state.members.find((member) => member.email === state.profile.email);
     if (owner) {
@@ -2377,9 +2418,10 @@ function normalizeState() {
       owner.name = state.profile.name;
       owner.email = state.profile.email;
       owner.role = state.profile.role;
-      owner.photo = state.profile.photo || owner.photo || "";
-      owner.avatar = owner.photo;
+      owner.photo = state.profile.photo || owner.photo || owner.avatar || "";
+      owner.avatar = owner.photo || owner.avatar || "";
       owner.permission = "todos os projetos";
+      if (!state.profile.photo) state.profile.photo = owner.photo || owner.avatar || "";
     } else {
       state.members.unshift({ id: "profile-owner", name: state.profile.name, email: state.profile.email, role: state.profile.role, photo: state.profile.photo || "", avatar: state.profile.photo || "", permission: "todos os projetos", accessCode: state.profile.accessCode });
     }
@@ -4084,8 +4126,9 @@ function renderSidebarProfile() {
   const avatar = card.querySelector(".mini-avatar");
   const name = card.querySelector("strong");
   const role = card.querySelector("p");
+  const currentPhoto = state.profile.photo || state.profile.avatar || "";
   if (avatar) {
-    if (state.profile.photo) avatar.innerHTML = `<img src="${escapeHtml(state.profile.photo)}" alt="">`;
+    if (currentPhoto) avatar.innerHTML = `<img src="${escapeHtml(currentPhoto)}" alt="">`;
     else avatar.textContent = initialsFromName(state.profile.name).slice(0, 1);
   }
   if (name) name.textContent = state.profile.name;
